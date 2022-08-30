@@ -129,7 +129,7 @@ abstract class Component {
 }
 
 class Clock extends Component {
-    el = "#cat";
+    el = "#clock";
 
     getState() {
         return {
