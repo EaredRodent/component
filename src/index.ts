@@ -4,9 +4,6 @@ interface State {
     [key: string]: any;
 }
 
-interface Context extends State {
-}
-
 interface Observer {
     value: any;
     update: () => void;
@@ -26,11 +23,9 @@ interface ExpressionWithObserver extends Expression {
 
 abstract class Component {
     constructor() {
-        const state = this.getState();
+        const state = this.defineState();
 
-        const context: Context = {};
-
-        // Make the state observable, then add to context
+        // Make the state observable, then add each to instance
 
         Object
             .entries(state)
@@ -38,7 +33,7 @@ abstract class Component {
                 let value = initialValue;
                 const dependentExpressions: Array<ExpressionWithObserver> = [];
 
-                Object.defineProperty(context, key, {
+                Object.defineProperty(this, key, {
                     get: () => {
                         if (!dependentExpressions.includes(this.expressionInitiator)) {
                             dependentExpressions.push(this.expressionInitiator);
@@ -54,29 +49,29 @@ abstract class Component {
                 });
             });
 
-        const expressions: Expressions = this.getExpressions.bind(context)();
+        const expressions: Expressions = this.defineExpressions();
 
-        // wrap the original render method to renderThenLazilyUpdateDOM, then add to expressions
+        // wrap the original defineRender method to renderThenLazilyUpdateDOM, then add to expressions
 
         const self: Component = this;
         let timerForDOMUpdate: null | number = null
-        expressions.render = function renderThenLazilyUpdateDOM() {
-            const renderResult = self.render.bind(context)();
+        expressions.render = () => {
+            const renderResult = this.defineRender();
 
             if(timerForDOMUpdate !== null) {
                 clearTimeout(timerForDOMUpdate)
             }
             timerForDOMUpdate = setTimeout(() => {
-                    const parent = document.querySelector(self.el);
-                    if (parent) {
-                        parent.innerHTML = renderResult;
+                    const container = document.querySelector(self.container);
+                    if (container) {
+                        container.innerHTML = renderResult;
                     }
                 })
 
             return renderResult;
         };
 
-        // Make the expressions observable, then add to context
+        // Make the expressions observable, then add each to instance
 
         Object.entries(expressions).forEach(
             ([expressionName, expression]: [string, ExpressionWithObserver]) => {
@@ -95,10 +90,10 @@ abstract class Component {
                     }
                 };
 
-                // initialize expression value with force update (microtask #1)
+                // Initialize expression value with force update
                 Promise.resolve().then(expression.observer.update);
 
-                Object.defineProperty(context, expressionName, {
+                Object.defineProperty(this, expressionName, {
                     get: () => {
                         if (!dependentExpressions.includes(this.expressionInitiator)) {
                             dependentExpressions.push(this.expressionInitiator);
@@ -109,35 +104,35 @@ abstract class Component {
             }
         );
 
-        // call the created hook (microtask #2)
-        Promise.resolve().then(this.created.bind(context));
+        // Call the created hook
+        Promise.resolve().then(() => this.created());
     }
 
     [x: string]: any;
 
     private expressionInitiator: null | ExpressionWithObserver = null;
 
-    protected abstract el: string;
+    protected abstract container: string;
 
-    protected abstract getState(): State;
+    protected abstract defineState(): State;
 
-    protected abstract getExpressions(): Expressions;
+    protected abstract defineExpressions(): Expressions;
 
     protected abstract created(): void;
 
-    protected abstract render(): string;
+    protected abstract defineRender(): string;
 }
 
 class Clock extends Component {
-    el = "#clock";
+    container = "#clock";
 
-    getState() {
+    defineState() {
         return {
             timestamp: Date.now()
         };
     }
 
-    getExpressions() {
+    defineExpressions() {
         return {
             dateObject: () => new Date(this.timestamp),
             hours: () => this.dateObject.getHours(),
@@ -155,14 +150,14 @@ class Clock extends Component {
         }, 1000);
     }
 
-    render() {
+    defineRender() {
         const arrowLayouts = [
             this.hoursDegrees,
             this.minutesDegrees,
             this.secondsDegrees
-        ].map((degrees: number) =>
+        ].map((degrees: number, i: number) =>
             `<div class="arrow-layout" style="transform: rotateZ(${degrees}deg)">
-                <div class="arrow"></div>
+                <div class="arrow" style="height: ${[15, 25, 30][i]}%"></div>
              </div>`)
 
         return `<div class="clock">
