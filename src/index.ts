@@ -35,8 +35,8 @@ abstract class Component {
 
                 Object.defineProperty(this, key, {
                     get: () => {
-                        if (!dependentExpressions.includes(this.expressionInitiator)) {
-                            dependentExpressions.push(this.expressionInitiator);
+                        if (!dependentExpressions.includes(this.candidateObserver)) {
+                            dependentExpressions.push(this.candidateObserver);
                         }
                         return value;
                     },
@@ -51,25 +51,24 @@ abstract class Component {
 
         const expressions: Expressions = this.defineExpressions();
 
-        // wrap the original defineRender method to renderThenLazilyUpdateDOM, then add to expressions
+        // Wrap the original defineRender method with renderThenLazilyUpdateDOM, then add to expressions
 
-        const self: Component = this;
         let timerForDOMUpdate: null | number = null
-        expressions.render = () => {
+        expressions.render = function renderThenLazilyUpdateDOM() {
             const renderResult = this.defineRender();
 
             if(timerForDOMUpdate !== null) {
                 clearTimeout(timerForDOMUpdate)
             }
             timerForDOMUpdate = setTimeout(() => {
-                    const container = document.querySelector(self.container);
+                    const container = document.querySelector(this.container);
                     if (container) {
                         container.innerHTML = renderResult;
                     }
                 })
 
             return renderResult;
-        };
+        }.bind(this);
 
         // Make the expressions observable, then add each to instance
 
@@ -80,9 +79,9 @@ abstract class Component {
                 expression.observer = {
                     value: undefined,
                     update: () => {
-                        this.expressionInitiator = expression;
+                        this.candidateObserver = expression;
                         expression.observer.value = expression();
-                        this.expressionInitiator = null;
+                        this.candidateObserver = null;
 
                         dependentExpressions.forEach((dependentExpression) => {
                             dependentExpression.observer.update();
@@ -95,8 +94,8 @@ abstract class Component {
 
                 Object.defineProperty(this, expressionName, {
                     get: () => {
-                        if (!dependentExpressions.includes(this.expressionInitiator)) {
-                            dependentExpressions.push(this.expressionInitiator);
+                        if (!dependentExpressions.includes(this.candidateObserver)) {
+                            dependentExpressions.push(this.candidateObserver);
                         }
                         return expression.observer?.value;
                     }
@@ -110,7 +109,7 @@ abstract class Component {
 
     [x: string]: any;
 
-    private expressionInitiator: null | ExpressionWithObserver = null;
+    private candidateObserver: null | ExpressionWithObserver = null;
 
     protected abstract container: string;
 
